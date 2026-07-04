@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
       source = "pasted-text";
     }
 
-    if (!lines.length) throw new Error("这个 YouTube 视频没有找到可读取字幕。可以先粘贴泰语字幕或歌词。");
+    if (!lines.length) throw new Error("没有找到可读取的泰语字幕。可以上传音频/视频转文字，或粘贴泰语字幕。");
 
     const cards = await enrichThaiLines(lines, { title, source });
     res.status(200).json({ mode: guessMode(title, lines), source, count: cards.length, cards });
@@ -130,7 +130,7 @@ async function enrichThaiLines(lines, context) {
     thai: line.text,
     zh: "",
     roman: "",
-    scene: "从 YouTube 字幕自动生成。",
+    scene: "从导入内容自动生成。",
     words: [],
     examples: [],
     syllables: line.text.split(/\s+/).join(" / "),
