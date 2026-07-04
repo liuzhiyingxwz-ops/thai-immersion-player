@@ -513,7 +513,7 @@
           <div class="roman">${s.roman}</div>
         </div>
         <div class="word-grid">
-          ${s.words.map(([thai, zh]) => `<div class="word-row" data-word="${thai}"><strong>${thai}</strong><span>${zh}</span><button class="word-play" data-word="${thai}">听</button></div>`).join(')}
+          ${s.words.map(([thai, zh]) => `<div class="word-row" data-word="${thai}"><strong>${thai}</strong><span>${zh}</span><button class="word-play" data-word="${thai}">听</button></div>`).join('')}
         </div>
         <div class="panel" style="box-shadow:none;margin:12px 0 0;padding:11px;background:#fff8e6;border-color:#f3d38b">
           <h3>日常用法</h3>
@@ -632,6 +632,7 @@
   </script>
 </body>
 </html>
+
 
 
 
