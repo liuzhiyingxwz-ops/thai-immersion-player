@@ -317,10 +317,10 @@
           <div class="label" style="color:var(--muted);font-size:12px">歌曲跟唱</div>
           <div class="lyric-focus" id="lyricFocus"></div>
           <div class="controls">
-            <button class="control-btn active">原声</button>
-            <button class="control-btn">慢速</button>
-            <button class="control-btn">循环</button>
-            <button class="control-btn">录音</button>
+            <button class="control-btn active" id="songPlayBtn">原声</button>
+            <button class="control-btn" id="songSlowBtn">慢速</button>
+            <button class="control-btn" id="songLoopBtn">循环</button>
+            <button class="control-btn" id="recordBtn">录音</button>
           </div>
           <div class="song-nav">
             <button class="btn" id="prevLyric">上一句</button>
@@ -433,6 +433,21 @@
 
     function saveFavorites() {
       localStorage.setItem('thaiFavorites', JSON.stringify([...favorites]));
+    }
+    function speakThai(text, rate = 0.9) {
+      if (!('speechSynthesis' in window)) {
+        toast('当前浏览器不支持语音朗读');
+        return;
+      }
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'th-TH';
+      utterance.rate = rate;
+      utterance.pitch = 1;
+      const voices = window.speechSynthesis.getVoices();
+      const thaiVoice = voices.find(voice => /th|Thai|ไทย/i.test(`${voice.lang} ${voice.name}`));
+      if (thaiVoice) utterance.voice = thaiVoice;
+      window.speechSynthesis.speak(utterance);
     }
 
     function renderSentences() {
@@ -553,12 +568,28 @@
       e.currentTarget.classList.toggle('active');
       toast(e.currentTarget.classList.contains('active') ? '已循环当前句' : '已关闭循环');
     });
-    document.getElementById('playBtn').addEventListener('click', () => toast('原型中用这个按钮模拟播放'));
+    document.getElementById('playBtn').addEventListener('click', () => speakThai(activeSentence.thai, document.getElementById('slowBtn').classList.contains('active') ? 0.65 : 0.9));
     document.getElementById('hideZhBtn').addEventListener('click', e => {
       hideZh = !hideZh;
       e.currentTarget.classList.toggle('active', hideZh);
       renderSentences();
     });
+    document.getElementById('songPlayBtn').addEventListener('click', () => speakThai(lyrics[lyricIndex].thai, document.getElementById('songSlowBtn').classList.contains('active') ? 0.65 : 0.9));
+    document.getElementById('songSlowBtn').addEventListener('click', e => {
+      e.currentTarget.classList.toggle('active');
+      toast(e.currentTarget.classList.contains('active') ? '歌曲慢速已开启' : '歌曲已恢复原速');
+    });
+    document.getElementById('songLoopBtn').addEventListener('click', e => {
+      e.currentTarget.classList.toggle('active');
+      if (e.currentTarget.classList.contains('active')) {
+        speakThai(lyrics[lyricIndex].thai, document.getElementById('songSlowBtn').classList.contains('active') ? 0.65 : 0.9);
+        toast('已循环当前歌词');
+      } else {
+        window.speechSynthesis && window.speechSynthesis.cancel();
+        toast('已关闭歌词循环');
+      }
+    });
+    document.getElementById('recordBtn').addEventListener('click', () => toast('录音需要接入麦克风权限，下一版可做'));
     document.getElementById('prevLyric').addEventListener('click', () => { lyricIndex = (lyricIndex + lyrics.length - 1) % lyrics.length; renderLyrics(); });
     document.getElementById('nextLyric').addEventListener('click', () => { lyricIndex = (lyricIndex + 1) % lyrics.length; renderLyrics(); });
 
@@ -569,3 +600,4 @@
   </script>
 </body>
 </html>
+
