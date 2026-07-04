@@ -1,4 +1,4 @@
-﻿const THAI_RE = /[\u0E00-\u0E7F]/;
+const THAI_RE = /[\u0E00-\u0E7F]/;
 
 module.exports = async function handler(req, res) {
   setCors(res);
@@ -143,7 +143,13 @@ async function enrichThaiLines(lines, context) {
       return enriched.map((item, index) => ({ ...rawCards[index], ...item, id: rawCards[index]?.id || item.id || `auto-${index + 1}` }));
     }
   } catch (error) {
-    return rawCards.map(card => ({ ...card, zh: "AI 拆解失败，可先练泰文原句", scene: error.message || "AI 拆解失败" }));
+    const message = error.message || "AI 拆解失败";
+    console.error("OpenAI enrich failed:", message);
+    return rawCards.map(card => ({
+      ...card,
+      zh: `AI 拆解失败：${message}`,
+      scene: message
+    }));
   }
   return rawCards;
 }
@@ -189,3 +195,4 @@ function guessMode(title, lines) {
   const joined = `${title} ${lines.map(line => line.text).join(" ")}`;
   return /เพลง|song|lyrics|mv|music/i.test(joined) ? "song" : "learn";
 }
+
