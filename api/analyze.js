@@ -25,7 +25,7 @@ module.exports = async function handler(req, res) {
       source = "pasted-text";
     }
 
-    if (!lines.length) throw new Error("这个 YouTube 视频没有找到可读取字幕。可以先粘贴泰语字幕/歌词。");
+    if (!lines.length) throw new Error("这个 YouTube 视频没有找到可读取字幕。可以先粘贴泰语字幕或歌词。");
 
     const cards = await enrichThaiLines(lines, { title, source });
     res.status(200).json({ mode: guessMode(title, lines), source, count: cards.length, cards });
@@ -117,7 +117,11 @@ function mergeShortLines(lines) {
 }
 
 function splitPastedText(text) {
-  return text.split(/\n+/).map(line => line.trim()).filter(line => line && THAI_RE.test(line)).slice(0, 40).map((text, index) => ({ text, startMs: index * 3000 }));
+  return text.split(/\n+/)
+    .map(line => line.trim())
+    .filter(line => line && THAI_RE.test(line))
+    .slice(0, 40)
+    .map((text, index) => ({ text, startMs: index * 3000 }));
 }
 
 async function enrichThaiLines(lines, context) {
@@ -133,18 +137,26 @@ async function enrichThaiLines(lines, context) {
     startMs: line.startMs || 0
   }));
 
-  if (!process.env.OPENAI_API_KEY) {
-    return rawCards.map(card => ({ ...card, zh: "待翻译：请在后端配置 OPENAI_API_KEY", scene: "已读取字幕；配置 AI 后可自动翻译和拆词。" }));
+  if (!process.env.DEEPSEEK_API_KEY) {
+    return rawCards.map(card => ({
+      ...card,
+      zh: "待翻译：请在后端配置 DEEPSEEK_API_KEY",
+      scene: "已读取字幕；配置 DeepSeek 后可自动翻译和拆词。"
+    }));
   }
 
   try {
-    const enriched = await callOpenAI(rawCards, context);
+    const enriched = await callDeepSeek(rawCards, context);
     if (Array.isArray(enriched) && enriched.length) {
-      return enriched.map((item, index) => ({ ...rawCards[index], ...item, id: rawCards[index]?.id || item.id || `auto-${index + 1}` }));
+      return enriched.map((item, index) => ({
+        ...rawCards[index],
+        ...item,
+        id: rawCards[index]?.id || item.id || `auto-${index + 1}`
+      }));
     }
   } catch (error) {
     const message = error.message || "AI 拆解失败";
-    console.error("OpenAI enrich failed:", message);
+    console.error("DeepSeek enrich failed:", message);
     return rawCards.map(card => ({
       ...card,
       zh: `AI 拆解失败：${message}`,
@@ -154,40 +166,64 @@ async function enrichThaiLines(lines, context) {
   return rawCards;
 }
 
-async function callOpenAI(cards, context) {
-  const model = process.env.OPENAI_MODEL || "gpt-4o-mini";
-  const input = [
+async function callDeepSeek(cards, context) {
+  const model = process.env.DEEPSEEK_MODEL || "deepseek-v4-flash";
+  const messages = [
     { role: "system", content: "你是泰语老师。把泰语字幕整理成中文学习卡片。只返回 JSON 数组，不要 Markdown。" },
     { role: "user", content: JSON.stringify({
       title: context.title,
       source: context.source,
-      required_shape: { thai: "泰语原句", zh: "自然中文翻译", roman: "适合中文学习者的罗马音", scene: "这句话的日常用法", words: [["泰语词/短语", "中文解释"]], examples: ["泰语例句 中文解释"], syllables: "适合跟读的音节拆分" },
+      required_shape: {
+        thai: "泰语原句",
+        zh: "自然中文翻译",
+        roman: "适合中文学习者的罗马音",
+        scene: "这句话的日常用法",
+        words: [["泰语词或短语", "中文解释"]],
+        examples: ["泰语例句 中文解释"],
+        syllables: "适合跟读的音节拆分"
+      },
       lines: cards.map(card => card.thai)
     }) }
   ];
 
-  const response = await fetch("https://api.openai.com/v1/responses", {
+  const response = await fetch("https://api.deepseek.com/chat/completions", {
     method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${process.env.OPENAI_API_KEY}` },
-    body: JSON.stringify({ model, input })
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.DEEPSEEK_API_KEY}`
+    },
+    body: JSON.stringify({
+      model,
+      messages,
+      stream: false,
+      response_format: { type: "json_object" }
+    })
   });
-  if (!response.ok) throw new Error(`AI 请求失败：${response.status}`);
-  const data = await response.json();
-  const output = data.output_text || extractResponsesText(data);
-  return JSON.parse(extractJson(output));
-}
 
-function extractResponsesText(data) {
-  return (data.output || []).flatMap(item => item.content || []).map(part => part.text || "").join("\n");
+  if (!response.ok) {
+    const text = await response.text().catch(() => "");
+    throw new Error(`DeepSeek 请求失败：${response.status}${text ? " " + text.slice(0, 160) : ""}`);
+  }
+
+  const data = await response.json();
+  const output = data.choices?.[0]?.message?.content || "";
+  const parsed = JSON.parse(extractJson(output));
+  return Array.isArray(parsed) ? parsed : parsed.cards;
 }
 
 function extractJson(text) {
   const trimmed = String(text || "").trim();
   const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (fenced) return fenced[1].trim();
-  const start = trimmed.indexOf("[");
-  const end = trimmed.lastIndexOf("]");
-  if (start >= 0 && end > start) return trimmed.slice(start, end + 1);
+
+  const startArray = trimmed.indexOf("[");
+  const endArray = trimmed.lastIndexOf("]");
+  if (startArray >= 0 && endArray > startArray) return trimmed.slice(startArray, endArray + 1);
+
+  const startObject = trimmed.indexOf("{");
+  const endObject = trimmed.lastIndexOf("}");
+  if (startObject >= 0 && endObject > startObject) return trimmed.slice(startObject, endObject + 1);
+
   return trimmed;
 }
 
@@ -195,4 +231,3 @@ function guessMode(title, lines) {
   const joined = `${title} ${lines.map(line => line.text).join(" ")}`;
   return /เพลง|song|lyrics|mv|music/i.test(joined) ? "song" : "learn";
 }
-
