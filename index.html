@@ -129,7 +129,7 @@
     .progress { height: 6px; border-radius: 999px; background: rgba(255,255,255,.18); overflow: hidden; }
     .progress span { display: block; height: 100%; width: 38%; background: #6ee7b7; }
 
-    .controls { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 11px 0; }
+    .controls { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 11px 0; }
     .control-btn { min-height: 39px; border: 1px solid var(--line); background: #fff; border-radius: var(--radius); font-size: 12px; color: var(--ink); }
     .control-btn.active { border-color: var(--teal); background: var(--teal-soft); color: #115e59; }
 
@@ -139,13 +139,15 @@
     .thai { font-size: 20px; line-height: 1.35; margin-bottom: 5px; word-break: keep-all; overflow-wrap: anywhere; }
     .zh { font-size: 14px; color: var(--ink); margin-bottom: 5px; }
     .roman { font-size: 13px; color: var(--muted); }
-    .sentence-actions { display: flex; gap: 7px; margin-top: 10px; }
+    .sentence-actions { display: flex; gap: 7px; margin-top: 10px; flex-wrap: wrap; }
 
     .panel { padding: 13px; margin-bottom: 11px; }
     .panel h3 { margin: 0 0 10px; font-size: 15px; }
     .word-grid { display: grid; gap: 8px; }
-    .word-row { display: grid; grid-template-columns: 88px 1fr; gap: 10px; padding: 9px; background: #f7f9fb; border-radius: var(--radius); font-size: 13px; }
+    .word-row { display: grid; grid-template-columns: 88px 1fr 42px; align-items: center; gap: 10px; padding: 9px; background: #f7f9fb; border-radius: var(--radius); font-size: 13px; }
     .word-row strong { color: var(--teal); }
+    .mini-action { border: 0; border-radius: 999px; background: var(--teal-soft); color: #115e59; min-height: 28px; padding: 4px 10px; font-size: 12px; }
+    .word-play { border: 1px solid #c7eee7; border-radius: 999px; background: #fff; color: #115e59; min-height: 28px; font-size: 12px; }
 
     textarea, input {
       width: 100%;
@@ -295,11 +297,13 @@
       <section class="view" id="learnView">
         <div class="player">
           <div class="meta"><span>采访片段</span><span id="timeLabel">00:18 / 01:05</span></div>
-          <div class="visual"><div><strong>朋友聊天：最近忙吗？</strong><span>当前句会跟随播放高亮</span></div></div>
+          <div class="visual"><div><strong id="activeVisualTitle">朋友聊天：最近忙吗？</strong><span>当前句会跟随播放高亮</span></div></div>
           <div class="progress"><span></span></div>
         </div>
         <div class="controls">
           <button class="control-btn active" id="playBtn">播放</button>
+          <button class="control-btn" id="prevSentenceBtn">上一句</button>
+          <button class="control-btn" id="nextSentenceBtn">下一句</button>
           <button class="control-btn" id="slowBtn">0.75x</button>
           <button class="control-btn" id="loopBtn">循环句</button>
           <button class="control-btn" id="hideZhBtn">藏中文</button>
@@ -450,24 +454,48 @@
       window.speechSynthesis.speak(utterance);
     }
 
+
+    function sentenceIndex() {
+      return sentences.findIndex(sentence => sentence.id === activeSentence.id);
+    }
+
+    function updatePlayerTitle() {
+      const title = document.getElementById('activeVisualTitle');
+      if (title) title.textContent = activeSentence.thai;
+    }
+
+    function selectSentence(sentence, shouldSpeak = false) {
+      activeSentence = sentence;
+      updatePlayerTitle();
+      renderDetail();
+      renderSentences();
+      if (shouldSpeak) speakThai(sentence.thai, document.getElementById('slowBtn').classList.contains('active') ? 0.65 : 0.9);
+    }
+
+    function moveSentence(step, shouldSpeak = true) {
+      const current = sentenceIndex();
+      const next = (current + step + sentences.length) % sentences.length;
+      selectSentence(sentences[next], shouldSpeak);
+    }
     function renderSentences() {
       const list = document.getElementById('sentenceList');
       list.innerHTML = '';
       sentences.forEach(sentence => {
-        const card = document.createElement('button');
+        const card = document.createElement('article');
         card.className = 'sentence-card' + (sentence.id === activeSentence.id ? ' active' : '');
         card.innerHTML = `
           <div class="thai">${sentence.thai}</div>
           <div class="zh">${hideZh ? '中文已隐藏' : sentence.zh}</div>
           <div class="roman">${sentence.roman}</div>
           <div class="sentence-actions">
+            <button class="mini-action" data-action="detail">拆解</button>
             <span class="tag">${favorites.has(sentence.id) ? '已收藏' : '可收藏'}</span>
-            <span class="tag">点开拆解</span>
           </div>`;
-        card.addEventListener('click', () => {
-          activeSentence = sentence;
-          renderDetail();
-          renderSentences();
+        card.addEventListener('click', () => selectSentence(sentence, true));
+
+        card.querySelector('[data-action="detail"]').addEventListener('click', event => {
+          event.stopPropagation();
+          selectSentence(sentence, false);
           go('detail');
         });
         list.appendChild(card);
@@ -485,7 +513,7 @@
           <div class="roman">${s.roman}</div>
         </div>
         <div class="word-grid">
-          ${s.words.map(([thai, zh]) => `<div class="word-row"><strong>${thai}</strong><span>${zh}</span></div>`).join('')}
+          ${s.words.map(([thai, zh]) => `<div class="word-row" data-word="${thai}"><strong>${thai}</strong><span>${zh}</span><button class="word-play" data-word="${thai}">听</button></div>`).join(')}
         </div>
         <div class="panel" style="box-shadow:none;margin:12px 0 0;padding:11px;background:#fff8e6;border-color:#f3d38b">
           <h3>日常用法</h3>
@@ -512,6 +540,8 @@
         renderSentences();
       });
       document.querySelector('#detailPanel [data-go="learn"]').addEventListener('click', () => go('learn'));
+      document.querySelectorAll('#detailPanel .word-row').forEach(row => row.addEventListener('click', () => speakThai(row.dataset.word, 0.8)));
+      document.querySelectorAll('#detailPanel .word-play').forEach(btn => btn.addEventListener('click', event => { event.stopPropagation(); speakThai(btn.dataset.word, 0.8); }));
     }
 
     function renderLyrics() {
@@ -569,6 +599,8 @@
       toast(e.currentTarget.classList.contains('active') ? '已循环当前句' : '已关闭循环');
     });
     document.getElementById('playBtn').addEventListener('click', () => speakThai(activeSentence.thai, document.getElementById('slowBtn').classList.contains('active') ? 0.65 : 0.9));
+    document.getElementById('prevSentenceBtn').addEventListener('click', () => moveSentence(-1, true));
+    document.getElementById('nextSentenceBtn').addEventListener('click', () => moveSentence(1, true));
     document.getElementById('hideZhBtn').addEventListener('click', e => {
       hideZh = !hideZh;
       e.currentTarget.classList.toggle('active', hideZh);
@@ -600,4 +632,7 @@
   </script>
 </body>
 </html>
+
+
+
 
