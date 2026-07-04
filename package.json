@@ -1,0 +1,13 @@
+﻿{
+  "name": "thai-immersion-youtube-auto",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Thai immersion player with YouTube caption analysis API",
+  "scripts": {
+    "dev": "vercel dev",
+    "start": "vercel dev"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

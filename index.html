@@ -290,7 +290,7 @@
         </div>
         <div class="panel">
           <h3>第一版说明</h3>
-          <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6">这个页面现在是成品原型。真实上线时，这里会接入语音识别、翻译和泰语句子拆解。</p>
+          <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6">YouTube 版会优先读取视频字幕；如果视频没有可读取字幕，会提示你粘贴泰语字幕。自动翻译和拆解需要后端配置 OPENAI_API_KEY。</p>
         </div>
       </section>
 
@@ -352,7 +352,7 @@
   <div class="toast" id="toast"></div>
 
   <script>
-    const sentences = [
+    let sentences = [
       {
         id: 's1',
         thai: 'ช่วงนี้ยุ่งไหม?',
@@ -608,6 +608,52 @@
       });
     }
 
+
+
+    function normalizeCards(cards, sourceType = 'learn') {
+      return cards.map((item, index) => ({
+        id: item.id || `${sourceType}-${Date.now()}-${index}`,
+        thai: item.thai || '',
+        zh: item.zh || '待翻译',
+        roman: item.roman || '',
+        scene: item.scene || '从导入内容自动生成。',
+        words: Array.isArray(item.words) ? item.words : [],
+        examples: Array.isArray(item.examples) ? item.examples : [],
+        syllables: item.syllables || ''
+      })).filter(item => item.thai.trim());
+    }
+
+    function applyAnalyzedContent(result) {
+      const cards = normalizeCards(result.cards || [], 'yt');
+      if (!cards.length) {
+        toast('没有生成可学习的句子');
+        return;
+      }
+      sentences = cards;
+      lyrics = cards.map(item => ({ ...item, syllables: item.syllables || item.thai.split('').join(' / ') }));
+      activeSentence = sentences[0];
+      lyricIndex = 0;
+      updatePlayerTitle();
+      renderSentences();
+      renderDetail();
+      renderLyrics();
+      toast(`已生成 ${cards.length} 句学习内容`);
+      go(result.mode === 'song' ? 'song' : 'learn');
+    }
+
+    function parseManualText(text) {
+      const lines = text.split(/\n+/).map(line => line.trim()).filter(Boolean);
+      const cards = [];
+      for (let i = 0; i < lines.length; i += 2) {
+        const thai = lines[i] || '';
+        const zh = /[\u0E00-\u0E7F]/.test(lines[i + 1] || '') ? '' : (lines[i + 1] || '');
+        if (/[\u0E00-\u0E7F]/.test(thai)) {
+          cards.push({ id: `manual-${i}`, thai, zh, roman: '', scene: '从粘贴文本生成。', words: [], examples: [] });
+        }
+      }
+      return cards;
+    }
+
     function renderFavorites() {
       const list = document.getElementById('favoriteList');
       const items = sentences.filter(s => favorites.has(s.id));
@@ -632,9 +678,37 @@
       tab.classList.add('active');
     }));
 
-    document.getElementById('mockImportBtn').addEventListener('click', () => {
-      toast('已生成示例学习内容');
-      go('learn');
+    document.getElementById('mockImportBtn').addEventListener('click', async () => {
+      const url = document.getElementById('linkInput').value.trim();
+      const textValue = document.getElementById('textInput').value.trim();
+      const title = document.getElementById('titleInput').value.trim();
+      if (!url && !textValue) {
+        toast('请粘贴 YouTube 链接或泰语字幕');
+        return;
+      }
+      const btn = document.getElementById('mockImportBtn');
+      btn.disabled = true;
+      btn.textContent = '解析中...';
+      try {
+        if (!url && textValue) {
+          applyAnalyzedContent({ mode: 'learn', cards: parseManualText(textValue) });
+          return;
+        }
+        const response = await fetch('/api/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url, text: textValue, title })
+        });
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || '解析失败');
+        applyAnalyzedContent(result);
+      } catch (error) {
+        toast(error.message || '解析失败，请粘贴字幕再试');
+        if (textValue) applyAnalyzedContent({ mode: 'learn', cards: parseManualText(textValue) });
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '生成学习内容';
+      }
     });
     document.getElementById('slowBtn').addEventListener('click', e => {
       e.currentTarget.classList.toggle('active');
