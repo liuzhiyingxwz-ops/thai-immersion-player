@@ -76,6 +76,8 @@
 
     .hero-action h2 { margin: 0 0 6px; font-size: 18px; }
     .hero-action p { margin: 0 0 12px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+    .memory-card { display: none; }
+    .memory-card.show { display: block; }
 
     .button-row { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
     .btn {
@@ -270,12 +272,18 @@
           </div>
         </div>
 
-        <div class="section-title"><h2>继续学习</h2><span>2 个内容</span></div>
+        <div class="section-title"><h2>继续学习</h2><span id="memoryStatus">示例内容</span></div>
+        <article class="content-card memory-card" id="memoryCard">
+          <div class="label">上次生成 · 自动保存</div>
+          <h3 id="memoryTitle">继续上次学习</h3>
+          <p id="memoryMeta">已保存上次生成的学习内容。</p>
+          <div class="card-footer"><span class="tag" id="memoryCount">0 句</span><button class="btn small primary" id="resumeMemoryBtn">继续</button></div>
+        </article>
         <article class="content-card">
           <div class="label">采访片段 · 日常问候</div>
           <h3>朋友聊天：最近忙吗？</h3>
           <p>练习真实语速里的问候、回答和“我也一样”。</p>
-          <div class="card-footer"><span class="tag">已学 38%</span><button class="btn small" data-go="learn">继续</button></div>
+          <div class="card-footer"><span class="tag">示例</span><button class="btn small" data-go="learn">打开</button></div>
         </article>
         <article class="content-card">
           <div class="label">歌曲练习 · 抒情句</div>
@@ -310,7 +318,7 @@
 每天都想你</textarea>
           <div class="button-row" style="margin-top:12px">
             <button class="btn primary" id="mockImportBtn">生成学习内容</button>
-            <button class="btn" data-go="learn">看示例</button>
+            <button class="btn" id="clearMemoryBtn">清空历史</button>
           </div>
         </div>
         <div class="panel">
@@ -453,6 +461,7 @@
     let lyricIndex = 0;
     let hideZh = false;
     const favorites = new Set(JSON.parse(localStorage.getItem('thaiFavorites') || '[]'));
+    const LAST_CONTENT_KEY = 'thaiImmersionLastContent';
     let detailReturnView = 'learn';
 
     const views = {
@@ -490,6 +499,68 @@
 
     function saveFavorites() {
       localStorage.setItem('thaiFavorites', JSON.stringify([...favorites]));
+    }
+    function saveLastContent(result, cards) {
+      try {
+        const title = document.getElementById('titleInput')?.value.trim() || '上次生成的学习内容';
+        localStorage.setItem(LAST_CONTENT_KEY, JSON.stringify({ savedAt: Date.now(), title, mode: result.mode || 'learn', cards }));
+        renderMemoryCard();
+      } catch (_) {}
+    }
+
+    function getLastContent() {
+      try { return JSON.parse(localStorage.getItem(LAST_CONTENT_KEY) || 'null'); }
+      catch (_) { return null; }
+    }
+
+    function formatSavedTime(time) {
+      if (!time) return '刚刚保存';
+      const minutes = Math.max(1, Math.round((Date.now() - time) / 60000));
+      if (minutes < 60) return `${minutes} 分钟前保存`;
+      const hours = Math.round(minutes / 60);
+      if (hours < 24) return `${hours} 小时前保存`;
+      return `${Math.round(hours / 24)} 天前保存`;
+    }
+
+    function renderMemoryCard() {
+      const saved = getLastContent();
+      const card = document.getElementById('memoryCard');
+      const status = document.getElementById('memoryStatus');
+      if (!card || !status) return;
+      if (!saved || !Array.isArray(saved.cards) || !saved.cards.length) {
+        card.classList.remove('show');
+        status.textContent = '示例内容';
+        return;
+      }
+      card.classList.add('show');
+      status.textContent = '有历史记录';
+      document.getElementById('memoryTitle').textContent = saved.title || '继续上次学习';
+      document.getElementById('memoryMeta').textContent = `${formatSavedTime(saved.savedAt)}，不用重新生成。`;
+      document.getElementById('memoryCount').textContent = `${saved.cards.length} 句`;
+    }
+
+    function restoreLastContent() {
+      const saved = getLastContent();
+      if (!saved || !Array.isArray(saved.cards) || !saved.cards.length) {
+        toast('还没有保存的学习内容');
+        return;
+      }
+      sentences = normalizeCards(saved.cards, 'saved');
+      lyrics = sentences.map(item => ({ ...item, syllables: item.syllables || item.thai.split('').join(' / ') }));
+      activeSentence = sentences[0];
+      lyricIndex = 0;
+      updatePlayerTitle();
+      renderSentences();
+      renderDetail();
+      renderLyrics();
+      toast('已恢复上次学习内容');
+      go(saved.mode === 'song' ? 'song' : 'learn');
+    }
+
+    function clearLastContent() {
+      localStorage.removeItem(LAST_CONTENT_KEY);
+      renderMemoryCard();
+      toast('已清空本机历史');
     }
     function speakThai(text, rate = 0.9) {
       if (!('speechSynthesis' in window)) {
@@ -687,6 +758,7 @@
       renderSentences();
       renderDetail();
       renderLyrics();
+      saveLastContent(result, cards);
       toast(`已生成 ${cards.length} 句学习内容`);
       go(result.mode === 'song' ? 'song' : 'learn');
     }
@@ -841,6 +913,10 @@
     document.getElementById('prevLyric').addEventListener('click', () => selectLyric((lyricIndex + lyrics.length - 1) % lyrics.length, true));
     document.getElementById('nextLyric').addEventListener('click', () => selectLyric((lyricIndex + 1) % lyrics.length, true));
 
+    document.getElementById('resumeMemoryBtn').addEventListener('click', restoreLastContent);
+    document.getElementById('clearMemoryBtn').addEventListener('click', clearLastContent);
+
+    renderMemoryCard();
     renderSentences();
     renderDetail();
     renderLyrics();
@@ -848,6 +924,10 @@
   </script>
 </body>
 </html>
+
+
+
+
 
 
 
