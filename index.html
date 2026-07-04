@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
@@ -165,11 +165,22 @@
     .import-tab { border: 1px solid var(--line); border-radius: var(--radius); background: #fff; min-height: 38px; font-size: 13px; }
     .import-tab.active { background: var(--teal); color: #fff; border-color: var(--teal); }
 
-    .song-card { padding: 14px; }
-    .lyric-focus { text-align: center; padding: 18px 5px 12px; }
-    .lyric-focus .thai { font-size: 25px; }
+    .song-card { padding: 14px; background: #fff; }
+    .lyric-focus {
+      text-align: center;
+      padding: 18px 12px 14px;
+      border-radius: var(--radius);
+      background: linear-gradient(180deg, #fff 0%, #f7fbfa 100%);
+      border: 1px solid #d7eee9;
+    }
+    .lyric-meta { display: flex; justify-content: space-between; gap: 10px; color: var(--muted); font-size: 12px; margin-bottom: 14px; }
+    .lyric-focus .thai { font-size: 28px; font-weight: 800; }
+    .lyric-focus .zh { font-size: 14px; color: var(--ink); }
     .syllables { color: var(--rose); font-size: 14px; margin-top: 8px; }
+    .song-progress-mini { height: 5px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin: 14px 0 4px; }
+    .song-progress-mini span { display: block; height: 100%; background: var(--teal); }
     .song-nav { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; margin-top: 12px; }
+    .lyric-index { color: var(--teal); font-weight: 800; font-size: 12px; margin-bottom: 5px; }
 
     .favorite-empty { text-align: center; color: var(--muted); padding: 28px 15px; line-height: 1.6; }
 
@@ -290,7 +301,7 @@
         </div>
         <div class="panel">
           <h3>第一版说明</h3>
-          <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6">YouTube 版会优先读取视频字幕；如果视频没有可读取字幕，会提示你粘贴泰语字幕。自动翻译和拆解需要后端配置 OPENAI_API_KEY。</p>
+          <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6">YouTube 版会优先读取视频字幕；如果视频没有可读取字幕，会提示你粘贴泰语字幕。自动翻译和拆解需要后端配置 DEEPSEEK_API_KEY。</p>
         </div>
       </section>
 
@@ -331,7 +342,7 @@
             <button class="btn primary" id="nextLyric">下一句</button>
           </div>
         </div>
-        <div class="section-title"><h2>歌词列表</h2><span>逐句练</span></div>
+        <div class="section-title"><h2>歌词列表</h2><span>点一句播放，拆解看词</span></div>
         <div class="sentence-list" id="lyricList"></div>
       </section>
 
@@ -592,18 +603,43 @@
 
     function renderLyrics() {
       const focus = lyrics[lyricIndex];
+      const progress = Math.round(((lyricIndex + 1) / lyrics.length) * 100);
       document.getElementById('lyricFocus').innerHTML = `
+        <div class="lyric-meta"><span>第 ${lyricIndex + 1} / ${lyrics.length} 句</span><span>跟唱模式</span></div>
         <div class="thai">${focus.thai}</div>
         <div class="zh">${focus.zh}</div>
         <div class="roman">${focus.roman}</div>
-        <div class="syllables">${focus.syllables}</div>`;
+        <div class="syllables">${focus.syllables}</div>
+        <div class="song-progress-mini"><span style="width:${progress}%"></span></div>
+        <div class="sentence-actions" style="justify-content:center;margin-top:12px">
+          <button class="mini-action" id="lyricFocusPlay">听当前句</button>
+          <button class="mini-action" id="lyricFocusDetail">拆解当前句</button>
+        </div>`;
+      document.getElementById('lyricFocusPlay').addEventListener('click', () => speakThai(focus.thai, document.getElementById('songSlowBtn').classList.contains('active') ? 0.65 : 0.9));
+      document.getElementById('lyricFocusDetail').addEventListener('click', () => openLyricDetail(lyricIndex));
       const list = document.getElementById('lyricList');
       list.innerHTML = '';
       lyrics.forEach((lyric, index) => {
-        const card = document.createElement('button');
+        const card = document.createElement('article');
         card.className = 'sentence-card' + (index === lyricIndex ? ' active' : '');
-        card.innerHTML = `<div class="thai">${lyric.thai}</div><div class="zh">${lyric.zh}</div><div class="roman">${lyric.roman}</div>`;
-        card.addEventListener('click', () => { lyricIndex = index; renderLyrics(); });
+        card.setAttribute('tabindex', '0');
+        card.innerHTML = `
+          <div class="lyric-index">${String(index + 1).padStart(2, '0')}</div>
+          <div class="thai">${lyric.thai}</div>
+          <div class="zh">${lyric.zh}</div>
+          <div class="roman">${lyric.roman}</div>
+          <div class="sentence-actions">
+            <button class="mini-action" data-action="lyric-detail">拆解</button>
+            <span class="tag">点句播放</span>
+          </div>`;
+        card.addEventListener('click', () => selectLyric(index, true));
+        card.addEventListener('keydown', event => {
+          if (event.key === 'Enter' || event.key === ' ') selectLyric(index, true);
+        });
+        card.querySelector('[data-action="lyric-detail"]').addEventListener('click', event => {
+          event.stopPropagation();
+          openLyricDetail(index);
+        });
         list.appendChild(card);
       });
     }
@@ -752,6 +788,8 @@
   </script>
 </body>
 </html>
+
+
 
 
 
