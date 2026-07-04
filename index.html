@@ -391,16 +391,44 @@
       }
     ];
 
-    const lyrics = [
-      { id: 'l1', thai: 'คิดถึงเธอทุกวัน', zh: '每天都想你', roman: 'kít tʉ̌ng ter túk wan', syllables: 'คิด / ถึง / เธอ / ทุก / วัน' },
-      { id: 'l2', thai: 'หัวใจยังรออยู่ตรงนี้', zh: '我的心还在这里等着', roman: 'hǔa jai yang ror yùu dtrong níi', syllables: 'หัว / ใจ / ยัง / รอ / อยู่ / ตรง / นี้' },
-      { id: 'l3', thai: 'ขอให้เพลงนี้ส่งไปถึงเธอ', zh: '愿这首歌传达到你那里', roman: 'kǒr hâi pleeng níi sòng bpai tʉ̌ng ter', syllables: 'ขอ / ให้ / เพลง / นี้ / ส่ง / ไป / ถึง / เธอ' }
+    let lyrics = [
+      {
+        id: 'l1',
+        thai: 'คิดถึงเธอทุกวัน',
+        zh: '每天都想你',
+        roman: 'kít tʉ̌ng ter túk wan',
+        syllables: 'คิด / ถึง / เธอ / ทุก / วัน',
+        scene: '歌词里表达每天都想念某人，适合练习 คิดถึง 这个高频表达。',
+        words: [['คิดถึง', '想念'], ['เธอ', '你'], ['ทุกวัน', '每天']],
+        examples: ['คิดถึงเธอมาก 很想你', 'คิดถึงทุกวัน 每天都想念']
+      },
+      {
+        id: 'l2',
+        thai: 'หัวใจยังรออยู่ตรงนี้',
+        zh: '我的心还在这里等着',
+        roman: 'hǔa jai yang ror yùu dtrong níi',
+        syllables: 'หัว / ใจ / ยัง / รอ / อยู่ / ตรง / นี้',
+        scene: '抒情歌词里常见的等待表达，หัวใจ 是“心”。',
+        words: [['หัวใจ', '心'], ['ยัง', '仍然，还'], ['รอ', '等待'], ['อยู่ตรงนี้', '在这里']],
+        examples: ['ฉันยังรอ 我还在等', 'อยู่ตรงนี้ 在这里']
+      },
+      {
+        id: 'l3',
+        thai: 'ขอให้เพลงนี้ส่งไปถึงเธอ',
+        zh: '愿这首歌传达到你那里',
+        roman: 'kǒr hâi pleeng níi sòng bpai tʉ̌ng ter',
+        syllables: 'ขอ / ให้ / เพลง / นี้ / ส่ง / ไป / ถึง / เธอ',
+        scene: '歌词里用 ขอให้ 表达愿望，语气柔和。',
+        words: [['ขอให้', '愿，希望'], ['เพลงนี้', '这首歌'], ['ส่งไปถึง', '送达，传到'], ['เธอ', '你']],
+        examples: ['ขอให้โชคดี 祝你好运', 'เพลงนี้เพราะ 这首歌好听']
+      }
     ];
 
     let activeSentence = sentences[0];
     let lyricIndex = 0;
     let hideZh = false;
     const favorites = new Set(JSON.parse(localStorage.getItem('thaiFavorites') || '[]'));
+    let detailReturnView = 'learn';
 
     const views = {
       home: document.getElementById('homeView'),
@@ -465,6 +493,7 @@
     }
 
     function selectSentence(sentence, shouldSpeak = false) {
+      detailReturnView = 'learn';
       activeSentence = sentence;
       updatePlayerTitle();
       renderDetail();
@@ -525,7 +554,7 @@
         </div>
         <div class="button-row" style="margin-top:12px">
           <button class="btn primary" id="favToggle">${isFav ? '取消收藏' : '收藏这句'}</button>
-          <button class="btn" data-go="learn">回到学习</button>
+          <button class="btn" data-go="${detailReturnView}">${detailReturnView === 'song' ? '回到歌曲' : '回到学习'}</button>
         </div>`;
       document.getElementById('favToggle').addEventListener('click', () => {
         if (favorites.has(s.id)) {
@@ -539,9 +568,26 @@
         renderDetail();
         renderSentences();
       });
-      document.querySelector('#detailPanel [data-go="learn"]').addEventListener('click', () => go('learn'));
+      document.querySelector('#detailPanel [data-go]').addEventListener('click', event => go(event.currentTarget.dataset.go));
       document.querySelectorAll('#detailPanel .word-row').forEach(row => row.addEventListener('click', () => speakThai(row.dataset.word, 0.8)));
       document.querySelectorAll('#detailPanel .word-play').forEach(btn => btn.addEventListener('click', event => { event.stopPropagation(); speakThai(btn.dataset.word, 0.8); }));
+    }
+
+
+
+    function selectLyric(index, shouldSpeak = false) {
+      lyricIndex = index;
+      renderLyrics();
+      if (shouldSpeak) speakThai(lyrics[lyricIndex].thai, document.getElementById('songSlowBtn').classList.contains('active') ? 0.65 : 0.9);
+    }
+
+    function openLyricDetail(index) {
+      lyricIndex = index;
+      activeSentence = lyrics[index];
+      detailReturnView = 'song';
+      renderDetail();
+      renderLyrics();
+      go('detail');
     }
 
     function renderLyrics() {
@@ -622,8 +668,8 @@
       }
     });
     document.getElementById('recordBtn').addEventListener('click', () => toast('录音需要接入麦克风权限，下一版可做'));
-    document.getElementById('prevLyric').addEventListener('click', () => { lyricIndex = (lyricIndex + lyrics.length - 1) % lyrics.length; renderLyrics(); });
-    document.getElementById('nextLyric').addEventListener('click', () => { lyricIndex = (lyricIndex + 1) % lyrics.length; renderLyrics(); });
+    document.getElementById('prevLyric').addEventListener('click', () => selectLyric((lyricIndex + lyrics.length - 1) % lyrics.length, true));
+    document.getElementById('nextLyric').addEventListener('click', () => selectLyric((lyricIndex + 1) % lyrics.length, true));
 
     renderSentences();
     renderDetail();
@@ -632,6 +678,7 @@
   </script>
 </body>
 </html>
+
 
 
 
